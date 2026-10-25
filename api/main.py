@@ -9,8 +9,10 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from src.allocator.learned import SEVERITY_NAMES, LearnedAllocator, clip_features
 from src.channel.attacks import apply_attack
 from src.crypto.secret import derive_key, encode_secret
 from src.eval.metrics import psnr, snr, ssim
@@ -20,6 +22,7 @@ from src.pipeline import embed_clip, recover_secret
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "data" / "manifest.csv"
 DETECTORS = ROOT / "results" / "detectors.pkl"
+LEARNED = ROOT / "results" / "learned_allocator.pkl"
 OUT = ROOT / "api_out"
 OUT.mkdir(exist_ok=True)
 
@@ -49,6 +52,12 @@ def detector():
     except Exception as e:      # the API still works without detection scores
         print(f"[api] detectors not loaded: {e}")
         return None
+
+
+@lru_cache(maxsize=1)
+def learned_model():
+    """The trained share-predicting model, or None if it has not been trained yet."""
+    return LearnedAllocator.load(LEARNED) if LEARNED.exists() else None
 
 
 def load_clip(clip_id: str):
@@ -84,6 +93,7 @@ class EmbedRequest(BaseModel):
     passphrase: str = Field(min_length=1)
     strategy: str = "fixed_50_50"
     share_audio: float | None = Field(default=None, ge=0, le=1)
+    severity: str = "medium"        # expected channel for the learned strategy
 
 
 class ExtractRequest(BaseModel):
@@ -106,18 +116,30 @@ def clips(split: str = "test", limit: int = 20):
 
 @app.get("/options")
 def options():
-    return {"strategies": list(STRATEGY_SHARE), "channels": CHANNELS}
+    strategies = list(STRATEGY_SHARE) + (["learned"] if learned_model() else [])
+    return {"strategies": strategies, "channels": CHANNELS,
+            "severities": list(SEVERITY_NAMES)}
 
 
 @app.post("/embed")
 def embed(req: EmbedRequest):
-    share = req.share_audio
-    if share is None:
-        if req.strategy not in STRATEGY_SHARE:
-            raise HTTPException(400, f"strategy must be one of {list(STRATEGY_SHARE)}")
-        share = STRATEGY_SHARE[req.strategy]
     audio, frames = load_clip(req.clip_id)
     bits = encode_secret(req.secret.encode(), derive_key(req.passphrase))
+    share = req.share_audio
+    if share is None and req.strategy == "learned":
+        model = learned_model()
+        if model is None:
+            raise HTTPException(400, "the learned allocator has not been trained yet")
+        fn = detector()
+        risks = fn(audio, frames) if fn else (0.0, 0.0, 0.0)
+        feats = clip_features(audio, frames, len(req.secret.encode()), risks)
+        if req.severity not in SEVERITY_NAMES:
+            raise HTTPException(400, f"severity must be one of {list(SEVERITY_NAMES)}")
+        share = model.predict_share(feats, SEVERITY_NAMES[req.severity])
+    elif share is None:
+        if req.strategy not in STRATEGY_SHARE:
+            raise HTTPException(400, f"unknown strategy: {req.strategy}")
+        share = STRATEGY_SHARE[req.strategy]
     try:
         sa, sv, n_a, n_v = embed_clip(audio, frames, bits, share)
     except Exception as e:      # usually: payload too large for this carrier
@@ -163,3 +185,8 @@ def download(job_id: str, kind: str):
     if kind not in names or not (OUT / job_id / names[kind]).exists():
         raise HTTPException(404, "not found")
     return FileResponse(OUT / job_id / names[kind], filename=f"{job_id}_{names[kind]}")
+
+
+WEB = ROOT / "web"
+if WEB.exists():
+    app.mount("/app", StaticFiles(directory=WEB, html=True), name="web")

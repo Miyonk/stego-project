@@ -1,0 +1,30 @@
+.tc { max-width: 880px; margin: 40px auto; padding: 24px 16px; text-align: left; font-family: system-ui, sans-serif; color: inherit; border-top: 1px solid #8884; }
+.tc h2 { margin: 0 0 4px; }
+.tc h3 { margin: 18px 0 6px; font-size: 1.05rem; }
+.tc-sub, .tc-hint { opacity: .75; font-size: .92rem; margin: 6px 0; }
+.tc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 14px 0 4px; }
+.tc-grid label { display: flex; flex-direction: column; gap: 4px; font-size: .88rem; }
+.tc-wide { grid-column: 1 / -1; }
+.tc input, .tc select { padding: 8px 10px; border-radius: 8px; border: 1px solid #8886; background: transparent; color: inherit; font: inherit; }
+.tc button { padding: 9px 16px; border-radius: 8px; border: 0; background: #4f46e5; color: #fff; font: inherit; cursor: pointer; margin-top: 8px; }
+.tc button:disabled { opacity: .5; cursor: wait; }
+.tc button.tc-ghost { background: transparent; color: inherit; border: 1px solid #8886; }
+.tc-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.tc-row button { margin-top: 0; }
+.tc-card { margin-top: 18px; padding: 16px; border: 1px solid #8886; border-radius: 12px; }
+.tc-q { margin: 6px 0; padding-left: 18px; }
+.tc-links { display: flex; gap: 14px; flex-wrap: wrap; }
+.tc-err { background: #dc262622; border: 1px solid #dc2626; padding: 10px 12px; border-radius: 8px; margin: 10px 0; font-size: .9rem; }
+.tc-busy { opacity: .8; font-style: italic; }
+.tc-result { margin-top: 14px; padding: 12px 14px; border-radius: 10px; border: 1px solid; }
+.tc-good { border-color: #16a34a; background: #16a34a1a; }
+.tc-fail { border-color: #dc2626; background: #dc26261a; }
+.tc-secret { font-size: 1.1rem; margin: 6px 0; font-weight: 600; }
+.tc-chip { display: inline-block; margin: 4px 6px 0 0; padding: 3px 9px; border-radius: 999px; font-size: .82rem; }
+.tc-ok { background: #16a34a33; }
+.tc-bad { background: #dc262633; }
+.tc-table { width: 100%; border-collapse: collapse; margin-top: 14px; font-size: .9rem; }
+.tc-table th, .tc-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #8884; }
+.tc-yes { color: #16a34a; font-weight: 600; }
+.tc-no { color: #dc2626; font-weight: 600; }
+@media (max-width: 560px) { .tc-grid { grid-template-columns: 1fr; } }
