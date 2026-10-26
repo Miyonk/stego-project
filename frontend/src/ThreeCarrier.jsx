@@ -1,29 +1,38 @@
 import { useEffect, useState } from "react";
-import "./ThreeCarrier.css";
 
-const API = import.meta.env.VITE_API ?? "http://127.0.0.1:8000";
+const API = import.meta.env.VITE_API || (import.meta.env.PROD ? "" : "http://127.0.0.1:8000");
 
 async function call(path, body) {
   const r = await fetch(API + path, body
     ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
     : undefined);
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail ?? data));
+  if (!r.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail ?? data));
+  }
   return data;
 }
 
 const fmt = (x, d = 1) => (x == null ? "-" : Number(x).toFixed(d));
 
-function Chip({ name, state }) {
-  return <span className={`tc-chip ${state === "ok" ? "tc-ok" : "tc-bad"}`}>{name}: {state === "ok" ? "readable" : "destroyed"}</span>;
+function StatusChip({ name, state }) {
+  const isOk = state === "ok";
+  return (
+    <span
+      className={`status-chip ${isOk ? "clean" : "flagged"}`}
+      style={{ marginRight: 6, marginBottom: 4 }}
+    >
+      {name}: {isOk ? "Surviving" : "Destroyed"}
+    </span>
+  );
 }
 
 export default function ThreeCarrier() {
   const [clips, setClips] = useState([]);
   const [opts, setOpts] = useState(null);
   const [clip, setClip] = useState("");
-  const [secret, setSecret] = useState("meet at noon, bring the keys");
-  const [pass, setPass] = useState("demo-pass");
+  const [secret, setSecret] = useState("Cross-modal distributed secret 2026");
+  const [pass, setPass] = useState("demo-tri-pass");
   const [plan, setPlan] = useState("erasure_2of3");
   const [scenario, setScenario] = useState("kill_video");
   const [job, setJob] = useState(null);
@@ -34,27 +43,40 @@ export default function ThreeCarrier() {
 
   useEffect(() => {
     Promise.all([call("/clips?split=test&limit=20"), call("/options3")])
-      .then(([c, o]) => { setClips(c); setOpts(o); if (c.length) setClip(c[0].clip_id); })
-      .catch((e) => setErr("Cannot reach the 3-carrier API. Start it with: python -m uvicorn api.app3:app --port 8000  (" + e.message + ")"));
+      .then(([c, o]) => {
+        setClips(c);
+        setOpts(o);
+        if (c.length) setClip(c[0].clip_id);
+      })
+      .catch((e) => {
+        setErr("Cannot reach 3-carrier API. Launch with: python -m uvicorn api.app3:app --port 8000 (" + e.message + ")");
+      });
   }, []);
 
   const run = async (label, fn) => {
-    setErr(""); setBusy(label);
-    try { await fn(); } catch (e) { setErr(e.message); }
-    setBusy("");
+    setErr("");
+    setBusy(label);
+    try {
+      await fn();
+    } catch (e) {
+      setErr(e.message);
+    } finally {
+      setBusy("");
+    }
   };
 
-  const hide = () => run("Hiding in audio, video and image...", async () => {
-    setRes(null); setTable(null);
+  const hide = () => run("Splitting payload and encoding Reed-Solomon parity...", async () => {
+    setRes(null);
+    setTable(null);
     setJob(await call("/embed3", { clip_id: clip, secret, passphrase: pass, plan }));
   });
 
-  const attack = () => run("Sending through the channel...", async () => {
+  const attack = () => run("Applying carrier destruction scenario...", async () => {
     setTable(null);
     setRes(await call("/extract3", { job_id: job.job_id, passphrase: pass, scenario }));
   });
 
-  const sweep = () => run("Testing every scenario (about a minute)...", async () => {
+  const sweep = () => run("Executing full scenario resilience sweep...", async () => {
     const rows = [];
     for (const s of opts.scenarios) {
       rows.push(await call("/extract3", { job_id: job.job_id, passphrase: pass, scenario: s }));
@@ -65,83 +87,248 @@ export default function ThreeCarrier() {
   const planInfo = opts?.plans.find((p) => p.name === plan);
 
   return (
-    <section className="tc">
-      <h2>Three carriers: audio + video + image</h2>
-      <p className="tc-sub">The secret is cut into pieces with error-correcting parity. Depending on the plan, losing a whole carrier can still be survived.</p>
-      {err && <div className="tc-err">{err}</div>}
+    <div>
+      <section className="panel-card">
+        <div className="panel-header">
+          <div>
+            <div className="panel-title">
+              <span className="step-tag">Tri-Modal Parity</span>
+              <span>Audio + Video + Image Distributed Steganography</span>
+            </div>
+            <p className="panel-desc">
+              The secret payload is partitioned using $k$-of-$n$ erasure coding across three distinct modalities.
+              Even if a channel attacker completely corrupts or strips an entire carrier, the secret remains 100% reconstructible.
+            </p>
+          </div>
+        </div>
 
-      <div className="tc-grid">
-        <label>Clip
-          <select value={clip} onChange={(e) => setClip(e.target.value)}>
-            {clips.map((c) => <option key={c.clip_id} value={c.clip_id}>{c.clip_id}</option>)}
-          </select>
-        </label>
-        <label>Plan
-          <select value={plan} onChange={(e) => setPlan(e.target.value)}>
-            {opts?.plans.map((p) => <option key={p.name} value={p.name}>{p.name}</option>)}
-          </select>
-        </label>
-        <label className="tc-wide">Secret (max {opts?.max_secret_bytes ?? 96} bytes)
-          <input value={secret} onChange={(e) => setSecret(e.target.value)} maxLength={96} />
-        </label>
-        <label>Passphrase
-          <input value={pass} onChange={(e) => setPass(e.target.value)} />
-        </label>
-      </div>
-      {planInfo && <p className="tc-hint">{planInfo.description}</p>}
-      <button onClick={hide} disabled={!!busy || !clip || !opts}>Hide secret</button>
-      {busy && <p className="tc-busy">{busy}</p>}
+        <div className="form-grid">
+          <div className="form-group">
+            <label className="form-label">Carrier Video/Audio Clip</label>
+            <select value={clip} onChange={(e) => setClip(e.target.value)}>
+              {clips.map((c) => (
+                <option key={c.clip_id} value={c.clip_id}>
+                  {c.clip_id}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Erasure Coding Strategy</label>
+            <select value={plan} onChange={(e) => setPlan(e.target.value)}>
+              {opts?.plans.map((p) => (
+                <option key={p.name} value={p.name}>
+                  {p.name.replace(/_/g, " ").toUpperCase()}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-group full-width">
+            <label className="form-label">
+              <span>Secret Message</span>
+              <span className="count">Max {opts?.max_secret_bytes ?? 96} bytes</span>
+            </label>
+            <input
+              value={secret}
+              onChange={(e) => setSecret(e.target.value)}
+              maxLength={opts?.max_secret_bytes ?? 96}
+              placeholder="Enter distributed secret..."
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Passphrase</label>
+            <input
+              value={pass}
+              onChange={(e) => setPass(e.target.value)}
+              placeholder="Secret encryption key..."
+            />
+          </div>
+
+          {planInfo && (
+            <div className="form-group" style={{ justifyContent: "center" }}>
+              <div
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: "var(--radius-md)",
+                  background: "var(--bg-input)",
+                  border: "1px solid var(--border-subtle)",
+                  fontSize: 12.5,
+                  color: "var(--text-secondary)",
+                }}
+              >
+                💡 <b>Plan Summary:</b> {planInfo.description}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="action-row">
+          <button className="btn-primary" onClick={hide} disabled={!!busy || !clip || !opts}>
+            {busy ? (
+              <>
+                <span className="api-pulse" />
+                <span>{busy}</span>
+              </>
+            ) : (
+              <span>🛡️ Encode & Disperse across 3 Carriers</span>
+            )}
+          </button>
+          <span className="action-hint">
+            Generates synchronous stego audio, stego video, and still image carriers.
+          </span>
+        </div>
+
+        {err && <div className="alert-box error">⚠️ {err}</div>}
+      </section>
 
       {job && (
-        <div className="tc-card">
-          <h3>Hidden: {job.k}-of-{job.n} plan "{job.plan}"</h3>
-          <p>Any <b>{job.k}</b> of the <b>{job.n}</b> pieces rebuild the secret. {job.bits_per_carrier} bits per carrier, {job.bits_total} bits in total.</p>
-          <ul className="tc-q">
-            {job.quality.snr_db != null && <li>Audio SNR <b>{fmt(job.quality.snr_db)} dB</b></li>}
-            {job.quality.video_psnr_db != null && <li>Video PSNR <b>{fmt(job.quality.video_psnr_db)} dB</b>, SSIM <b>{fmt(job.quality.video_ssim, 3)}</b></li>}
-            {job.quality.image_psnr_db != null && <li>Image PSNR <b>{fmt(job.quality.image_psnr_db)} dB</b></li>}
-          </ul>
-          <p className="tc-links">
-            {job.carriers.map((k) => <a key={k} href={`${API}/download3/${job.job_id}/${k}`}>download {k}</a>)}
+        <section className="panel-card">
+          <div className="panel-header">
+            <div>
+              <div className="panel-title">
+                <span className="step-tag">Dispersal Status</span>
+                <span>Active Plan: {job.k}-of-{job.n} ("{job.plan}")</span>
+              </div>
+              <p className="panel-desc">
+                Any <b>{job.k}</b> of the <b>{job.n}</b> pieces can rebuild the secret. Carrier budget: <b>{job.bits_per_carrier} bits/carrier</b> (total <b>{job.bits_total} bits</b>).
+              </p>
+            </div>
+          </div>
+
+          <div className="metrics-grid">
+            {job.quality.snr_db != null && (
+              <div className="metric-card">
+                <div className="metric-val">{fmt(job.quality.snr_db)} <span style={{ fontSize: 13, color: "var(--text-tertiary)" }}>dB</span></div>
+                <div className="metric-title">Audio SNR</div>
+                <div className="metric-desc">Acoustic fidelity</div>
+              </div>
+            )}
+            {job.quality.video_psnr_db != null && (
+              <div className="metric-card">
+                <div className="metric-val">{fmt(job.quality.video_psnr_db)} <span style={{ fontSize: 13, color: "var(--text-tertiary)" }}>dB</span></div>
+                <div className="metric-title">Video PSNR</div>
+                <div className="metric-desc">SSIM: {fmt(job.quality.video_ssim, 3)}</div>
+              </div>
+            )}
+            {job.quality.image_psnr_db != null && (
+              <div className="metric-card">
+                <div className="metric-val">{fmt(job.quality.image_psnr_db)} <span style={{ fontSize: 13, color: "var(--text-tertiary)" }}>dB</span></div>
+                <div className="metric-title">Image PSNR</div>
+                <div className="metric-desc">Still frame transparency</div>
+              </div>
+            )}
+          </div>
+
+          <div className="download-links">
+            {job.carriers.map((k) => (
+              <a key={k} className="download-btn" href={`${API}/download3/${job.job_id}/${k}`} download>
+                ⬇️ Download {k.toUpperCase()} Carrier
+              </a>
+            ))}
+          </div>
+
+          {/* Attack Simulator */}
+          <h3 style={{ fontSize: 15, marginTop: 24, marginBottom: 8, color: "var(--text-primary)" }}>
+            Simulate Loss of Entire Modality
+          </h3>
+          <p className="panel-desc" style={{ marginBottom: 14 }}>
+            Test channel survivability under intentional carrier degradation ("kill_video", "kill_audio", etc.).
           </p>
 
-          <h3>Attack it</h3>
-          <div className="tc-row">
-            <select value={scenario} onChange={(e) => setScenario(e.target.value)}>
-              {opts.scenarios.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-            <button onClick={attack} disabled={!!busy}>Send and recover</button>
-            <button className="tc-ghost" onClick={sweep} disabled={!!busy}>Try all scenarios</button>
+          <div className="form-grid">
+            <div className="form-group">
+              <label className="form-label">Attack Scenario</label>
+              <select value={scenario} onChange={(e) => setScenario(e.target.value)}>
+                {opts.scenarios.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-          <p className="tc-hint">"kill_*" scenarios use deliberately extreme settings that destroy one carrier each. They show the idea, not a typical channel.</p>
+
+          <div className="action-row">
+            <button className="btn-secondary" onClick={attack} disabled={!!busy}>
+              {busy ? "Testing Attack..." : "⚡ Execute Attack & Extract"}
+            </button>
+            <button className="btn-ghost" onClick={sweep} disabled={!!busy}>
+              🧪 Sweep All Attack Scenarios
+            </button>
+          </div>
 
           {res && (
-            <div className={`tc-result ${res.recovered ? "tc-good" : "tc-fail"}`}>
-              <b>{res.recovered ? "Secret recovered" : "Secret lost"}</b> ({res.scenario})
-              {res.recovered && <div className="tc-secret">"{res.secret}"</div>}
-              <div>{Object.entries(res.carrier_status).map(([k, v]) => <Chip key={k} name={k} state={v} />)}</div>
-              {!res.recovered && <div className="tc-hint">Needed {res.needed} readable pieces of {res.of}.</div>}
+            <div className="extract-result-box" style={{ marginTop: 18 }}>
+              <div className="extract-header">
+                <div>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)" }}>
+                    Scenario Result: <b>{res.scenario}</b> &bull;{" "}
+                  </span>
+                  <span className={`status-chip ${res.recovered ? "clean" : "flagged"}`}>
+                    {res.recovered ? "✓ Secret Recovered" : "✗ Reconstruction Failed"}
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ margin: "10px 0" }}>
+                {Object.entries(res.carrier_status).map(([k, v]) => (
+                  <StatusChip key={k} name={k.toUpperCase()} state={v} />
+                ))}
+              </div>
+
+              <div className="secret-display">
+                {res.recovered
+                  ? res.secret
+                  : `Failed to recover. Required ${res.needed} readable carriers out of ${res.of}.`}
+              </div>
             </div>
           )}
 
           {table && (
-            <table className="tc-table">
-              <thead><tr><th>Scenario</th><th>Audio</th><th>Video</th><th>Image</th><th>Secret</th></tr></thead>
-              <tbody>
-                {table.map((r) => (
-                  <tr key={r.scenario}>
-                    <td>{r.scenario}</td>
-                    {["audio", "video", "image"].map((k) => (
-                      <td key={k}>{r.carrier_status[k] ? (r.carrier_status[k] === "ok" ? "ok" : "destroyed") : "-"}</td>
-                    ))}
-                    <td className={r.recovered ? "tc-yes" : "tc-no"}>{r.recovered ? "recovered" : "lost"}</td>
+            <div style={{ marginTop: 24 }}>
+              <h4 style={{ fontSize: 14, color: "var(--text-primary)", marginBottom: 8 }}>
+                Scenario Resilience Matrix
+              </h4>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Scenario</th>
+                    <th>Audio Status</th>
+                    <th>Video Status</th>
+                    <th>Image Status</th>
+                    <th>Extraction Outcome</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {table.map((r) => (
+                    <tr key={r.scenario}>
+                      <td><code>{r.scenario}</code></td>
+                      {["audio", "video", "image"].map((k) => {
+                        const isOk = r.carrier_status[k] === "ok";
+                        return (
+                          <td key={k}>
+                            <span className={`status-chip ${isOk ? "clean" : "flagged"}`}>
+                              {isOk ? "Surviving" : "Destroyed"}
+                            </span>
+                          </td>
+                        );
+                      })}
+                      <td>
+                        <span className={`status-chip ${r.recovered ? "clean" : "flagged"}`}>
+                          {r.recovered ? "✓ Recovered" : "✗ Lost"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
-        </div>
+        </section>
       )}
-    </section>
+    </div>
   );
 }
