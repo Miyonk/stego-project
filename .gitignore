@@ -1,17 +1,22 @@
-# Data and outputs (too large for Git)
-data/
-results/
-*.wav
+# Data and outputs (root datasets are too large for Git)
+/data/
+/results/
 *.mp3
 *.mp4
 *.avi
 *.pt
 *.pth
 
+# Audio/video extensions (except deploy_space demo assets)
+*.wav
+!deploy_space/**/*.wav
+!deploy_space/**/*.mkv
+!deploy_space/**/*.flv
+
 # Python
 __pycache__/
 *.pyc
 .venv/
 .ipynb_checkpoints/
-.pytest_cache/api_out/
+.pytest_cache/
 api_out/

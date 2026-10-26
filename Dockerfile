@@ -22,8 +22,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY --chown=user src ./src
 COPY --chown=user api ./api
 COPY --chown=user configs ./configs
-COPY --chown=user data ./data
-COPY --chown=user results ./results
+COPY --chown=user deploy_space/data ./data
+COPY --chown=user deploy_space/results ./results
 COPY --chown=user --from=web /web/dist ./frontend/dist
 
 EXPOSE 8000 10000 7860
